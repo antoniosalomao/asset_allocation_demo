@@ -45,12 +45,12 @@ def RP_objective_function_simple(x0, Q):
 
     return F
 
-def RP_objective_function_minvar_ls(x0, Q, RHO):
+def RP_objective_function_minvar_ls(x0, Q, RHO_i):
     '''
     Minimum Variance Risk Parity, method: Least-Squares
     '''
     X, theta = x0[:Q.shape[0]], x0[-1]
-    F = sum([math.pow(X[N]*Q[N]@X - theta, 2) for N, i in enumerate(X)]) + RHO*X.T@Q@X
+    F = sum([math.pow(X[N]*Q[N]@X - theta, 2) for N, i in enumerate(X)]) + RHO_i*X.T@Q@X
 
     return F
 
@@ -156,19 +156,24 @@ def get_SMVRP_report(Q, LB_UB_x, C, RHO_tol, RHO_n_trials):
     '''
     Sequential Minimum Variance Risk Parity
     '''
-    RHO = sorted([math.pow(2, i) for i in np.arange(-20, 18)], reverse=True)
+    #RHO = sorted([math.pow(2, i) for i in np.arange(-50, 50)], reverse=True)
+    init_RHO = np.power(10, 6)
+    B = np.random.uniform(low=0.08, high=0.12)
+    B = 0.1
+    B_arr = [(init_RHO * math.pow(B, i)) for i in np.arange(1, 50)]
     all_solutions = []
-    for N, RHO_i in enumerate(RHO):
+    for N, RHO_i in enumerate(B_arr):
         if (N == 0):
             init_X = np.random.uniform(low=LB_UB_x[0], high=LB_UB_x[1], size=len(Q))
         elif (RHO_i < RHO_tol):
-            RHO_i = 0   
+            RHO_i = 0
         rp_opt_dict = {'Q': Q, 'LB_UB_x': LB_UB_x, 'C': C, 'init_X': init_X, 'RHO_i': RHO_i}
         report = get_RP_minvar_ls_report(**rp_opt_dict)
         init_X = get_init_X_SMVRP(report=report, all_solutions=all_solutions, Q=Q, LB_UB_x=LB_UB_x, RHO_i=RHO_i)
         print('Herfindhal index: {hi:.4f} ( Target: {t} )'.format(hi=get_herfidhal_index(X=init_X, Q=Q), t=(1/len(Q))))
+        if RHO_i == 0:
+            break
     report = sorted(all_solutions, key=lambda x: x[0])[0][-1]
-
     return report
 
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------#
@@ -220,7 +225,7 @@ def get_complete_rp_solutions(port_dict, n_trials, rp_type):
         if (rp_type == 'Random'):
             report = get_RP_simple_report(Q=Q, LB_UB_x=LB_UB_x, C=C)
         elif (rp_type == 'Min-variance'):
-            report = get_SMVRP_report(Q=Q, LB_UB_x=LB_UB_x, C=C, RHO_tol=0.000005, RHO_n_trials=10)
+            report = get_SMVRP_report(Q=Q, LB_UB_x=LB_UB_x, C=C, RHO_tol=math.pow(10, -8), RHO_n_trials=10)
         elif (rp_type == 'Max-Sharpe'):
             print('Max Sharpe')
         else:
@@ -232,12 +237,13 @@ def get_complete_rp_solutions(port_dict, n_trials, rp_type):
             hi, sharpe = get_herfidhal_index(X=X, Q=Q), get_sharpe(X=X, R=R, RF=0, Q=Q)
             RP_solutions_report['Portfolio N'].append(trial + 1),  RP_solutions_report['Report'].append(report)
             RP_solutions_report['X'].append(X),                    RP_solutions_report['E[R]'].append(E_R)
-            RP_solutions_report['Variance'].append(port_variance), RP_solutions_report['RC'].append(rc)
+            RP_solutions_report['Variance'].append(np.power(port_variance,0.5)), RP_solutions_report['RC'].append(rc)
             RP_solutions_report['RRC'].append(rrc),                RP_solutions_report['Herfindhal index'].append(hi)
             RP_solutions_report['Sharpe'].append(sharpe)
             print('====== Trial #{} ======'.format(trial + 1))
             print('RP weights: {}'.format(X))
             print('RRC: {}'.format(rrc))
+            print('Variance: {}'.format(port_variance))
             print('Sharpe: {}'.format(sharpe))
             print('\n')
 
@@ -257,12 +263,15 @@ covar_k1 = np.array([[94.868, 33.750, 12.325, -1.178, 8.778],
 ret_k1 = np.array([0.15, -0.05, 0.1, -0.07, 0.25])
 
 port_dict_1 = {'R': ret_k1, 'Q': covar_k1}
-cons_dict = {'LB_UB_x': tuple((-1, 1)), 'C': 1.5}
+cons_dict = {'LB_UB_x': tuple((-1, 1)), 'C': 1}
 port_dict_1.update(cons_dict)
+all_solutions = get_complete_rp_solutions(port_dict=port_dict_1, n_trials=5, rp_type='Min-variance')
 
-all_solutions = get_complete_rp_solutions(port_dict=port_dict_1, n_trials=1, rp_type='Min-variance')
-print(all_solutions)
-
+for k, v in all_solutions.items():
+    print(k)
+    print(v)
+    print('\n')
+    
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------#
 #------------#
 # Matplotlib #
